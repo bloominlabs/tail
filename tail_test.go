@@ -111,7 +111,7 @@ func TestWaitsForFileToExistRelativePath(t *testing.T) {
 
 	go tailTest.VerifyTailOutput(tail, []string{"hello", "world"}, false)
 
-	<-time.After(100 * time.Millisecond)
+	<-time.After(200 * time.Millisecond)
 	if err := ioutil.WriteFile("test.txt", []byte("hello\nworld\n"), 0600); err != nil {
 		tailTest.Fatal(err)
 	}
