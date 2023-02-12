@@ -1,12 +1,12 @@
-// Copyright (c) 2019 FOSS contributors of https://github.com/nxadm/tail
+// Copyright (c) 2019 FOSS contributors of https://github.com/bloominlabs/tail
 // Copyright (c) 2015 HPE Software Inc. All rights reserved.
 // Copyright (c) 2013 ActiveState Software Inc. All rights reserved.
 
-//nxadm/tail provides a Go library that emulates the features of the BSD `tail`
-//program. The library comes with full support for truncation/move detection as
-//it is designed to work with log rotation tools. The library works on all
-//operating systems supported by Go, including POSIX systems like Linux and
-//*BSD, and MS Windows. Go 1.9 is the oldest compiler release supported.
+// bloominlabs/tail provides a Go library that emulates the features of the BSD `tail`
+// program. The library comes with full support for truncation/move detection as
+// it is designed to work with log rotation tools. The library works on all
+// operating systems supported by Go, including POSIX systems like Linux and
+// *BSD, and MS Windows. Go 1.9 is the oldest compiler release supported.
 package tail
 
 import (
@@ -14,17 +14,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/nxadm/tail/ratelimiter"
-	"github.com/nxadm/tail/util"
-	"github.com/nxadm/tail/watch"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"gopkg.in/tomb.v1"
+
+	"github.com/bloominlabs/tail/ratelimiter"
+	"github.com/bloominlabs/tail/util"
+	"github.com/bloominlabs/tail/watch"
 )
 
 var (
@@ -84,9 +85,9 @@ type Config struct {
 	// Optionally, use a ratelimiter (e.g. created by the ratelimiter/NewLeakyBucket function)
 	RateLimiter *ratelimiter.LeakyBucket
 
-	// Optionally use a Logger. When nil, the Logger is set to tail.DefaultLogger.
+	// Optionally use a Logger. When nil, the Logger is set to zerolog.Logger.
 	// To disable logging, set it to tail.DiscardingLogger
-	Logger logger
+	Logger *zerolog.Logger
 }
 
 type Tail struct {
@@ -110,9 +111,9 @@ type Tail struct {
 
 var (
 	// DefaultLogger logs to os.Stderr and it is used when Config.Logger == nil
-	DefaultLogger = log.New(os.Stderr, "", log.LstdFlags)
+	DefaultLogger = log.With().Caller().Logger()
 	// DiscardingLogger can be used to disable logging output
-	DiscardingLogger = log.New(ioutil.Discard, "", 0)
+	DiscardingLogger = log.With().Logger().Output(io.Discard)
 )
 
 // TailFile begins tailing the file. And returns a pointer to a Tail struct
@@ -137,7 +138,7 @@ func TailFile(filename string, config Config) (*Tail, error) {
 
 	// when Logger was not specified in config, use default logger
 	if t.Logger == nil {
-		t.Logger = DefaultLogger
+		t.Logger = &DefaultLogger
 	}
 
 	if t.Poll {
@@ -219,8 +220,9 @@ func (tail *Tail) reopen() error {
 		tail.file, err = OpenFile(tail.Filename)
 		if err != nil {
 			if os.IsNotExist(err) {
-				tail.Logger.Printf("Waiting for %s to appear...", tail.Filename)
-				if err := tail.watcher.BlockUntilExists(&tail.Tomb); err != nil {
+				tail.Logger.Info().Str("file", tail.Filename).Msg("Waiting for file to appear...")
+				err := tail.watcher.BlockUntilExists(&tail.Tomb)
+				if err != nil {
 					if err == tomb.ErrDying {
 						return err
 					}
@@ -390,23 +392,23 @@ func (tail *Tail) waitForChanges() error {
 		tail.changes = nil
 		if tail.ReOpen {
 			// XXX: we must not log from a library.
-			tail.Logger.Printf("Re-opening moved/deleted file %s ...", tail.Filename)
+			tail.Logger.Debug().Str("filename", tail.Filename).Msg("Re-opening moved/deleted file")
 			if err := tail.reopen(); err != nil {
 				return err
 			}
-			tail.Logger.Printf("Successfully reopened %s", tail.Filename)
+			tail.Logger.Trace().Str("filename", tail.Filename).Msg("Successfully reopened ")
 			tail.openReader()
 			return nil
 		}
-		tail.Logger.Printf("Stopping tail as file no longer exists: %s", tail.Filename)
+		tail.Logger.Info().Str("filename", tail.Filename).Msg("Stopping tail as file no longer exists")
 		return ErrStop
 	case <-tail.changes.Truncated:
 		// Always reopen truncated files (Follow is true)
-		tail.Logger.Printf("Re-opening truncated file %s ...", tail.Filename)
+		tail.Logger.Trace().Str("filename", tail.Filename).Msg("re-opening truncated file")
 		if err := tail.reopen(); err != nil {
 			return err
 		}
-		tail.Logger.Printf("Successfully reopened truncated %s", tail.Filename)
+		tail.Logger.Trace().Str("filename", tail.Filename).Msg("successfuly reopened truncated file")
 		tail.openReader()
 		return nil
 	case <-tail.Dying():
@@ -463,8 +465,7 @@ func (tail *Tail) sendLine(line string) bool {
 	if tail.Config.RateLimiter != nil {
 		ok := tail.Config.RateLimiter.Pour(uint16(len(lines)))
 		if !ok {
-			tail.Logger.Printf("Leaky bucket full (%v); entering 1s cooloff period.",
-				tail.Filename)
+			tail.Logger.Info().Str("file", tail.Filename).Msg("Leaky bucket full; entering 1s cooloff period.")
 			return false
 		}
 	}

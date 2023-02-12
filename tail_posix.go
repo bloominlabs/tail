@@ -1,4 +1,4 @@
-// Copyright (c) 2019 FOSS contributors of https://github.com/nxadm/tail
+// Copyright (c) 2019 FOSS contributors of https://github.com/bloominlabs/tail
 // +build !windows
 
 package tail

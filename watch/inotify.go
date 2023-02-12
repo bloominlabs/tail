@@ -1,4 +1,4 @@
-// Copyright (c) 2019 FOSS contributors of https://github.com/nxadm/tail
+// Copyright (c) 2019 FOSS contributors of https://github.com/bloominlabs/tail
 // Copyright (c) 2015 HPE Software Inc. All rights reserved.
 // Copyright (c) 2013 ActiveState Software Inc. All rights reserved.
 
@@ -9,9 +9,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/nxadm/tail/util"
+	"github.com/bloominlabs/tail/util"
 
-    "github.com/fsnotify/fsnotify"
+	"github.com/fsnotify/fsnotify"
 	"gopkg.in/tomb.v1"
 )
 
@@ -27,11 +27,12 @@ func NewInotifyFileWatcher(filename string) *InotifyFileWatcher {
 }
 
 func (fw *InotifyFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
-	err := WatchCreate(fw.Filename)
+	// watch parent directory to see if file eventually exists
+	watcher, err := CreateWatcher(filepath.Dir(fw.Filename))
 	if err != nil {
 		return err
 	}
-	defer RemoveWatchCreate(fw.Filename)
+	defer RemoveWatcher(watcher)
 
 	// Do a real check now as the file might have been created before
 	// calling `WatchFlags` above.
@@ -40,8 +41,7 @@ func (fw *InotifyFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
 		return err
 	}
 
-	events := Events(fw.Filename)
-
+	events := watcher.eventsChan
 	for {
 		select {
 		case evt, ok := <-events:
@@ -56,6 +56,7 @@ func (fw *InotifyFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
 			if err != nil {
 				return err
 			}
+
 			if evtName == fwFilename {
 				return nil
 			}
@@ -63,11 +64,10 @@ func (fw *InotifyFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
 			return tomb.ErrDying
 		}
 	}
-	panic("unreachable")
 }
 
 func (fw *InotifyFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChanges, error) {
-	err := Watch(fw.Filename)
+	watcher, err := CreateWatcher(fw.Filename)
 	if err != nil {
 		return nil, err
 	}
@@ -77,8 +77,7 @@ func (fw *InotifyFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChange
 
 	go func() {
 
-		events := Events(fw.Filename)
-
+		events := watcher.eventsChan
 		for {
 			prevSize := fw.Size
 
@@ -88,11 +87,11 @@ func (fw *InotifyFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChange
 			select {
 			case evt, ok = <-events:
 				if !ok {
-					RemoveWatch(fw.Filename)
+					RemoveWatcher(watcher)
 					return
 				}
 			case <-t.Dying():
-				RemoveWatch(fw.Filename)
+				RemoveWatcher(watcher)
 				return
 			}
 
@@ -101,7 +100,7 @@ func (fw *InotifyFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChange
 				fallthrough
 
 			case evt.Op&fsnotify.Rename == fsnotify.Rename:
-				RemoveWatch(fw.Filename)
+				RemoveWatcher(watcher)
 				changes.NotifyDeleted()
 				return
 
@@ -113,7 +112,7 @@ func (fw *InotifyFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChange
 				fi, err := os.Stat(fw.Filename)
 				if err != nil {
 					if os.IsNotExist(err) {
-						RemoveWatch(fw.Filename)
+						RemoveWatcher(watcher)
 						changes.NotifyDeleted()
 						return
 					}

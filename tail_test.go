@@ -1,4 +1,4 @@
-// Copyright (c) 2019 FOSS contributors of https://github.com/nxadm/tail
+// Copyright (c) 2019 FOSS contributors of https://github.com/bloominlabs/tail
 // Copyright (c) 2015 HPE Software Inc. All rights reserved.
 // Copyright (c) 2013 ActiveState Software Inc. All rights reserved.
 
@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nxadm/tail/ratelimiter"
-	"github.com/nxadm/tail/watch"
+	"github.com/bloominlabs/tail/ratelimiter"
+	"github.com/bloominlabs/tail/watch"
 )
 
 func TestTailFile(t *testing.T) {
@@ -75,6 +75,22 @@ func TestWaitsForFileToExist(t *testing.T) {
 	<-time.After(100 * time.Millisecond)
 	tailTest.CreateFile("test.txt", "hello\nworld\n")
 	tailTest.Cleanup(tail, true)
+}
+
+func TestBroadcastsToMultipleTails(t *testing.T) {
+	tailTest, cleanup := NewTailTest("broadcasts-to-multiple-tails", t)
+	defer cleanup()
+	tail1 := tailTest.StartTail("test.txt", Config{})
+	tail2 := tailTest.StartTail("test.txt", Config{})
+
+	tailTest.CreateFile("test.txt", "hello\nworld\n")
+	<-time.After(200 * time.Millisecond)
+
+	tailTest.ReadLines(tail1, []string{"hello", "world"}, false)
+	tailTest.ReadLines(tail2, []string{"hello", "world"}, false)
+
+	tail1.Stop()
+	tail2.Stop()
 }
 
 func TestWaitsForFileToExistRelativePath(t *testing.T) {
@@ -731,6 +747,8 @@ func (t TailTest) TruncateFile(name string, contents string) {
 }
 
 func (t TailTest) StartTail(name string, config Config) *Tail {
+	t.Helper()
+
 	tail, err := TailFile(t.path+"/"+name, config)
 	if err != nil {
 		t.Fatal(err)
@@ -739,6 +757,8 @@ func (t TailTest) StartTail(name string, config Config) *Tail {
 }
 
 func (t TailTest) VerifyTailOutput(tail *Tail, lines []string, expectEOF bool) {
+	t.Helper()
+
 	defer close(t.done)
 	t.ReadLines(tail, lines, false)
 	// It is important to do this if only EOF is expected
@@ -765,6 +785,7 @@ func (t TailTest) VerifyTailOutputUsingCursor(tail *Tail, lines []string, expect
 }
 
 func (t TailTest) ReadLines(tail *Tail, lines []string, useCursor bool) {
+	t.Helper()
 	cursor := 1
 
 	for _, line := range lines {
@@ -807,5 +828,4 @@ func (t TailTest) Cleanup(tail *Tail, stop bool) {
 	if stop {
 		tail.Stop()
 	}
-	tail.Cleanup()
 }

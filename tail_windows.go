@@ -1,4 +1,4 @@
-// Copyright (c) 2019 FOSS contributors of https://github.com/nxadm/tail
+// Copyright (c) 2019 FOSS contributors of https://github.com/bloominlabs/tail
 // +build windows
 
 package tail
@@ -6,7 +6,7 @@ package tail
 import (
 	"os"
 
-	"github.com/nxadm/tail/winfile"
+	"github.com/bloominlabs/tail/winfile"
 )
 
 // Deprecated: this function is only useful internally and, as such,

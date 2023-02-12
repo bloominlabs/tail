@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nxadm/tail"
+	"github.com/bloominlabs/tail"
 )
 
 var logFile = "/var/log/syslog"
@@ -42,7 +42,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer t.Cleanup()
+	defer t.Stop()
 
 	for line := range t.Lines {
 		fmt.Println(line.Text)
