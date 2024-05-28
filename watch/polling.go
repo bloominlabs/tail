@@ -5,6 +5,7 @@
 package watch
 
 import (
+	"fmt"
 	"os"
 	"runtime"
 	"time"
@@ -13,18 +14,29 @@ import (
 	"gopkg.in/tomb.v1"
 )
 
+type PollingFileWatcherOption func(*PollingFileWatcher)
+
+func WithPollDuration(value time.Duration) PollingFileWatcherOption {
+	return func(c *PollingFileWatcher) {
+		c.PollDuration = value
+	}
+}
+
 // PollingFileWatcher polls the file for changes.
 type PollingFileWatcher struct {
-	Filename string
-	Size     int64
+	Filename     string
+	Size         int64
+	PollDuration time.Duration
 }
 
-func NewPollingFileWatcher(filename string) *PollingFileWatcher {
-	fw := &PollingFileWatcher{filename, 0}
+func NewPollingFileWatcher(filename string, options ...PollingFileWatcherOption) *PollingFileWatcher {
+	fw := &PollingFileWatcher{filename, 0, 250 * time.Millisecond}
+	for _, o := range options {
+		o(fw)
+	}
+	fmt.Println(fw)
 	return fw
 }
-
-var POLL_DURATION time.Duration
 
 func (fw *PollingFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
 	for {
@@ -34,7 +46,7 @@ func (fw *PollingFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
 			return err
 		}
 		select {
-		case <-time.After(POLL_DURATION):
+		case <-time.After(fw.PollDuration):
 			continue
 		case <-t.Dying():
 			return tomb.ErrDying
@@ -66,7 +78,7 @@ func (fw *PollingFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChange
 			default:
 			}
 
-			time.Sleep(POLL_DURATION)
+			time.Sleep(fw.PollDuration)
 			fi, err := os.Stat(fw.Filename)
 			if err != nil {
 				// Windows cannot delete a file if a handle is still open (tail keeps one open)
@@ -112,8 +124,4 @@ func (fw *PollingFileWatcher) ChangeEvents(t *tomb.Tomb, pos int64) (*FileChange
 	}()
 
 	return changes, nil
-}
-
-func init() {
-	POLL_DURATION = 250 * time.Millisecond
 }

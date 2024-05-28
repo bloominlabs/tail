@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/bloominlabs/tail/ratelimiter"
-	"github.com/bloominlabs/tail/watch"
 )
 
 func TestTailFile(t *testing.T) {
@@ -39,13 +38,6 @@ func ExampleTailFile() {
 		fmt.Println(line.Text)
 	}
 	// Prints all the lines in the logfile and keeps printing new input
-}
-
-func TestMain(m *testing.M) {
-	// Use a smaller poll duration for faster test runs. Keep it below
-	// 100ms (which value is used as common delays for tests)
-	watch.POLL_DURATION = 5 * time.Millisecond
-	os.Exit(m.Run())
 }
 
 func TestMustExist(t *testing.T) {
@@ -206,7 +198,7 @@ func TestReOpenWithCursor(t *testing.T) {
 	tailTest.CreateFile("test.txt", "hello\nworld\n")
 	tail := tailTest.StartTail(
 		"test.txt",
-		Config{Follow: true, ReOpen: true, Poll: true})
+		Config{Follow: true, ReOpen: true, Poll: true, PollInterval: time.Millisecond * 250})
 	content := []string{"hello", "world", "more", "data", "endofworld"}
 	go tailTest.VerifyTailOutputUsingCursor(tail, content, false)
 
@@ -455,6 +447,7 @@ func maxLineSize(t *testing.T, follow bool, fileContent string, expected []strin
 func reOpen(t *testing.T, poll bool) {
 	var name string
 	var delay time.Duration
+	pollInterval := time.Millisecond * 5
 	if poll {
 		name = "reopen-polling"
 		delay = 300 * time.Millisecond // account for POLL_DURATION
@@ -467,7 +460,7 @@ func reOpen(t *testing.T, poll bool) {
 	tailTest.CreateFile("test.txt", "hello\nworld\n")
 	tail := tailTest.StartTail(
 		"test.txt",
-		Config{Follow: true, ReOpen: true, Poll: poll})
+		Config{Follow: true, ReOpen: true, Poll: poll, PollInterval: pollInterval})
 	content := []string{"hello", "world", "more", "data", "endofworld"}
 	go tailTest.VerifyTailOutput(tail, content, false)
 
@@ -650,7 +643,7 @@ func reSeek(t *testing.T, poll bool) {
 	tailTest.CreateFile("test.txt", "a really long string goes here\nhello\nworld\n")
 	tail := tailTest.StartTail(
 		"test.txt",
-		Config{Follow: true, ReOpen: false, Poll: poll})
+		Config{Follow: true, ReOpen: false, Poll: poll, PollInterval: time.Millisecond * 5})
 
 	go tailTest.VerifyTailOutput(tail, []string{
 		"a really long string goes here", "hello", "world", "h311o", "w0r1d", "endofworld"}, false)

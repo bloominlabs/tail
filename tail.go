@@ -71,11 +71,12 @@ type logger interface {
 // Config is used to specify how a file must be tailed.
 type Config struct {
 	// File-specifc
-	Location  *SeekInfo // Tail from this location. If nil, start at the beginning of the file
-	ReOpen    bool      // Reopen recreated files (tail -F)
-	MustExist bool      // Fail early if the file does not exist
-	Poll      bool      // Poll for file changes instead of using the default inotify
-	Pipe      bool      // The file is a named pipe (mkfifo)
+	Location     *SeekInfo     // Tail from this location. If nil, start at the beginning of the file
+	ReOpen       bool          // Reopen recreated files (tail -F)
+	MustExist    bool          // Fail early if the file does not exist
+	Poll         bool          // Poll for file changes instead of using the default inotify
+	PollInterval time.Duration // Interval to poll for file changes
+	Pipe         bool          // The file is a named pipe (mkfifo)
 
 	// Generic IO
 	Follow        bool // Continue looking for new lines (tail -f)
@@ -142,7 +143,11 @@ func TailFile(filename string, config Config) (*Tail, error) {
 	}
 
 	if t.Poll {
-		t.watcher = watch.NewPollingFileWatcher(filename)
+		withPollDuration := watch.WithPollDuration(time.Millisecond * 500)
+		if config.PollInterval != 0 {
+			withPollDuration = watch.WithPollDuration(config.PollInterval)
+		}
+		t.watcher = watch.NewPollingFileWatcher(filename, withPollDuration)
 	} else {
 		t.watcher = watch.NewInotifyFileWatcher(filename)
 	}
