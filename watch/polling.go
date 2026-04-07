@@ -34,7 +34,6 @@ func NewPollingFileWatcher(filename string, options ...PollingFileWatcherOption)
 	for _, o := range options {
 		o(fw)
 	}
-	fmt.Println(fw)
 	return fw
 }
 
